@@ -25,7 +25,6 @@ __global__ void matmulKernel(float* A, float* B, float* C)
 	}
 }
 
-
 template<int N, int M, int P>
 void matmul(float* A, float* B, float* C)
 {
@@ -49,4 +48,44 @@ void matmul(float* A, float* B, float* C)
 	cudaFree(d_A);
 	cudaFree(d_B);
 	cudaFree(d_C);
+}
+
+template<int N, int M>
+__global__ void forwardKernel(float* X, float* W, float* B, float* Y) {
+	int row = blockIdx.y * blockDim.y + threadIdx.y;
+	int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (row < N && col < M) {
+		Y[col] = B[col];
+		for (int i = 0; i < N; i++) {
+			Y[col] += X[i] * W[i * M + col];
+		}
+	}
+}
+
+template<int N, int M>
+void forward(float* X, float* W, float* B, float* Y) {
+	constexpr int BLOCK_SIZE = 16;
+	dim3 threadsPerBlock(BLOCK_SIZE, BLOCK_SIZE);
+	dim3 numBlocks((M + BLOCK_SIZE - 1) / BLOCK_SIZE, (N + BLOCK_SIZE - 1) / BLOCK_SIZE);
+
+	float* d_X, * d_W, * d_B, *d_Y;
+	CUDA_CHECK(cudaMalloc(&d_X, N * sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&d_W, M * N * sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&d_B, M * sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&d_Y, M * sizeof(float)));
+
+	CUDA_CHECK(cudaMemcpy(d_X, X, N * sizeof(float), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(d_W, W, M * N * sizeof(float), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(d_B, B, M * sizeof(float), cudaMemcpyHostToDevice));
+
+	forwardKernel<N, M><<<numBlocks, threadsPerBlock>>> (d_X, d_W, d_B, d_Y);
+	CUDA_CHECK(cudaDeviceSynchronize());
+
+	CUDA_CHECK(cudaMemcpy(Y, d_Y, M * sizeof(float), cudaMemcpyDeviceToHost));
+
+	cudaFree(d_X);
+	cudaFree(d_W);
+	cudaFree(d_B);
+	cudaFree(d_Y);
 }
