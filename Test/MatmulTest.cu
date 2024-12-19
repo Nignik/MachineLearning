@@ -54,3 +54,19 @@ TEST(ForwardTest, ForwardTest)
 	for (int i = 0; i < M; i++)
 		EXPECT_NEAR(expected[i], h_Y[i], tolerance) << "Mismatch at index " << i << std::endl;
 }
+
+TEST(ReluTest, ReluTest) {
+	constexpr int N = 10;
+	constexpr int M = 1;
+	float h_X[N], h_Y[N];
+
+	for (int i = 0; i < N; i++)
+		h_X[i] = float(i - 5);
+
+	relu<N, M>(&h_X[0], &h_Y[0]);
+
+	float expected[N] = { 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 1.f, 2.f, 3.f, 4.f};
+	const float tolerance = 0.001f;
+	for (int i = 0; i < N; i++)
+		EXPECT_NEAR(expected[i], h_Y[i], tolerance) << "Mismatch at index " << i << std::endl;
+}

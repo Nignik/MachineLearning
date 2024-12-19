@@ -89,3 +89,34 @@ void forward(float* X, float* W, float* B, float* Y) {
 	cudaFree(d_B);
 	cudaFree(d_Y);
 }
+
+template<int N, int M>
+__global__ void reluKernel(float* X, float* Y) {
+	int col = blockDim.x * blockIdx.x + threadIdx.x;
+	int row = blockDim.y * blockIdx.y + threadIdx.y;
+
+	if (row < N && col < M) {
+		Y[M * row + col] = X[M * row + col] >= 0 ? X[M * row + col] : 0;
+	}
+}
+
+template<int N, int M>
+void relu(float* X, float* Y) {
+	constexpr int BLOCK_SIZE = 16;
+	dim3 threadsPerBlock(BLOCK_SIZE, BLOCK_SIZE);
+	dim3 numBlocks((M + BLOCK_SIZE - 1) / BLOCK_SIZE, (N + BLOCK_SIZE - 1) / BLOCK_SIZE);
+
+	float* d_X, * d_W, * d_B, *d_Y;
+	CUDA_CHECK(cudaMalloc(&d_X, N * M * sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&d_Y, N * M * sizeof(float)));
+
+	CUDA_CHECK(cudaMemcpy(d_X, X, N * M * sizeof(float), cudaMemcpyHostToDevice));
+
+	reluKernel<N, M><<<numBlocks, threadsPerBlock>>> (d_X, d_Y);
+	CUDA_CHECK(cudaDeviceSynchronize());
+
+	CUDA_CHECK(cudaMemcpy(Y, d_Y, N * M * sizeof(float), cudaMemcpyDeviceToHost));
+
+	cudaFree(d_X);
+	cudaFree(d_Y);
+}
