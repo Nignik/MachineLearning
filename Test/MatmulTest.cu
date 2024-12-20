@@ -2,6 +2,7 @@
 #include <gmock/gmock.h>
 
 #include <kernels.cuh>
+#include <algorithm>
 
 using ::testing::Pointwise;
 using ::testing::FloatNear;
@@ -67,6 +68,21 @@ TEST(ReluTest, ReluTest) {
 
 	float expected[N] = { 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 1.f, 2.f, 3.f, 4.f};
 	const float tolerance = 0.001f;
+	for (int i = 0; i < N; i++)
+		EXPECT_NEAR(expected[i], h_Y[i], tolerance) << "Mismatch at index " << i << std::endl;
+}
+
+TEST(SoftmaxTest, SoftmaxTest)
+{
+	constexpr int N = 5;
+	float h_X[N] = { 4.f, 4.5f, -5.f, 8.23f, 4.3345f };
+	float h_Y[N];
+	float max = *std::max_element(h_X, h_X + sizeof(h_X) / sizeof(float));
+
+	softmax<N>(&h_X[0], &h_Y[0], &max);
+
+	float expected[N] = { 0.0137431885f, 0.0226586872f, 0.000001696f, 0.9443938738f, 0.0192025545f };
+	const float tolerance = 0.000001f;
 	for (int i = 0; i < N; i++)
 		EXPECT_NEAR(expected[i], h_Y[i], tolerance) << "Mismatch at index " << i << std::endl;
 }

@@ -106,7 +106,7 @@ void relu(float* X, float* Y) {
 	dim3 threadsPerBlock(BLOCK_SIZE, BLOCK_SIZE);
 	dim3 numBlocks((M + BLOCK_SIZE - 1) / BLOCK_SIZE, (N + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
-	float* d_X, * d_W, * d_B, *d_Y;
+	float *d_X, *d_Y;
 	CUDA_CHECK(cudaMalloc(&d_X, N * M * sizeof(float)));
 	CUDA_CHECK(cudaMalloc(&d_Y, N * M * sizeof(float)));
 
@@ -116,6 +116,49 @@ void relu(float* X, float* Y) {
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	CUDA_CHECK(cudaMemcpy(Y, d_Y, N * M * sizeof(float), cudaMemcpyDeviceToHost));
+
+	cudaFree(d_X);
+	cudaFree(d_Y);
+}
+
+template<int N>
+__global__ void softmaxKernel(float* X, float* Y, float* max)
+{
+	int col = blockDim.x * blockIdx.x + threadIdx.x;
+
+	if (col < N)
+	{
+		float numerator = expf(X[col] - *max);
+		float denominator = 0;
+		for (int i = 0; i < N; i++)
+		{
+			denominator += expf(X[i] - *max);
+		}
+
+		Y[col] = numerator / denominator;
+	}
+}
+
+template<int N>
+void softmax(float* X, float* Y, float* max)
+{
+	constexpr int BLOCK_SIZE = 16;
+	dim3 threadsPerBlock(BLOCK_SIZE);
+	dim3 numBlocks((N + BLOCK_SIZE - 1) / BLOCK_SIZE);
+
+	float *d_X, *d_Y;
+	float *d_max;
+	CUDA_CHECK(cudaMalloc(&d_X, N * sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&d_Y, N * sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&d_max, sizeof(float)));
+
+	CUDA_CHECK(cudaMemcpy(d_X, X, N * sizeof(float), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(d_max, max, sizeof(float), cudaMemcpyHostToDevice));
+
+	softmaxKernel<N> <<<numBlocks, threadsPerBlock >>> (d_X, d_Y, d_max);
+	CUDA_CHECK(cudaDeviceSynchronize());
+
+	CUDA_CHECK(cudaMemcpy(Y, d_Y, N * sizeof(float), cudaMemcpyDeviceToHost));
 
 	cudaFree(d_X);
 	cudaFree(d_Y);
