@@ -103,3 +103,14 @@ TEST(CrossEntropyTest, CrossEntropyTest)
 	for (int i = 0; i < N; i++)
 		EXPECT_NEAR(expected[i], h_H[i], tolerance) << "Mismatch at index " << i << std::endl;
 }
+
+TEST(InitRandomTest, InitRandomTest)
+{
+	constexpr int N = 2;
+	constexpr int M = 3;
+	float h_Y[N][M];
+
+	initRandom<N, M>(&h_Y[0][0]);
+
+	EXPECT_EQ(0, 0);
+}

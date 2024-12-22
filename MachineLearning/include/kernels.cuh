@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cuda_runtime.h>
+#include <curand_kernel.h>
 
 #define CUDA_CHECK(err) \
     if (err != cudaSuccess) { \
@@ -235,4 +236,40 @@ void crossEntropy(float* P, float* Q, float* H)
 	cudaFree(d_P);
 	cudaFree(d_Q);
 	cudaFree(d_H);
+}
+
+/*
+* Takes in one matrix
+* Y - NxM output matrix
+*/
+template<int N, int M>
+__global__ void initRandomKernel(float* Y)
+{
+	int col = blockDim.x * blockIdx.x + threadIdx.x;
+	int row = blockDim.y * blockIdx.y + threadIdx.y;
+
+	if (row < N && col < M)
+	{
+		curandState state;
+		curand_init(42, row * M + col, 0, &state);
+		Y[row * M + col] = curand_normal(&state) * sqrtf(2.f / N);
+	}
+}
+
+template<int N, int M>
+void initRandom(float* Y)
+{
+	constexpr int BLOCK_SIZE = 16;
+	dim3 threadsPerBlock(BLOCK_SIZE, BLOCK_SIZE);
+	dim3 numBlocks((M + BLOCK_SIZE - 1) / BLOCK_SIZE, (N + BLOCK_SIZE - 1) / BLOCK_SIZE);
+
+	float *d_Y;
+	CUDA_CHECK(cudaMalloc(&d_Y, N * M * sizeof(float)));
+
+	initRandomKernel<N, M> << <numBlocks, threadsPerBlock >> > (d_Y);
+	CUDA_CHECK(cudaDeviceSynchronize());
+
+	CUDA_CHECK(cudaMemcpy(Y, d_Y, N * M * sizeof(float), cudaMemcpyDeviceToHost));
+
+	cudaFree(d_Y);
 }
