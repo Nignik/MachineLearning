@@ -74,15 +74,32 @@ TEST(ReluTest, ReluTest) {
 
 TEST(SoftmaxTest, SoftmaxTest)
 {
-	constexpr int N = 5;
-	float h_X[N] = { 4.f, 4.5f, -5.f, 8.23f, 4.3345f };
-	float h_Y[N];
-	float max = *std::max_element(h_X, h_X + sizeof(h_X) / sizeof(float));
+	constexpr int N = 2;
+	constexpr int M = 3;
+	float h_X[N][M] = {{4.f, 4.5f, -5.f}, {8.23f, 4.3345f, 5.232f}};
+	float h_Y[N][M];
 
-	softmax<N>(&h_X[0], &h_Y[0], &max);
+	softmax<N, M>(&h_X[0][0], &h_Y[0][0]);
 
-	float expected[N] = { 0.0137431885f, 0.0226586872f, 0.000001696f, 0.9443938738f, 0.0192025545f };
-	const float tolerance = 0.000001f;
+	float expected[N][M] = { {0.3775230792f, 0.6224303308f, 0.00004659f}, {0.9343873681f, 0.0189990902f, 0.0466135417f} };
+	const float tolerance = 0.0000001f;
 	for (int i = 0; i < N; i++)
-		EXPECT_NEAR(expected[i], h_Y[i], tolerance) << "Mismatch at index " << i << std::endl;
+		for (int j = 0; j < M; j++)
+			EXPECT_NEAR(expected[i][j], h_Y[i][j], tolerance) << "Mismatch at index " << i << ', ' << j << std::endl;
+}
+
+TEST(CrossEntropyTest, CrossEntropyTest)
+{
+	constexpr int N = 2;
+	constexpr int M = 3;
+	float h_P[N][M] = { {0.7, 0.2, 0.1}, {0.1, 0.8, 0.1} };
+	float h_Q[N][M] = { {1, 0, 0}, {0, 1, 0} };
+	float h_H[N];
+
+	crossEntropy<N, M>(&h_P[0][0], &h_Q[0][0], &h_H[0]);
+
+	float expected[N] = { 0.35667494, 0.22314355 };
+	const float tolerance = 0.0000001f;
+	for (int i = 0; i < N; i++)
+		EXPECT_NEAR(expected[i], h_H[i], tolerance) << "Mismatch at index " << i << std::endl;
 }
