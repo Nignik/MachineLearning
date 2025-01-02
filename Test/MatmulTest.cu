@@ -114,3 +114,72 @@ TEST(InitRandomTest, InitRandomTest)
 
 	EXPECT_EQ(0, 0);
 }
+
+TEST(CrossEntropyBackwardsTest, CrossEntropyBackwardsTest)
+{
+	constexpr int classes = 3;
+	constexpr int batches = 4;
+	float gradient[batches][classes];
+
+	float predictions[batches][classes] = {
+		{0.406902, 0.264210, 0.328889},
+		{0.272696, 0.440727, 0.286577},
+		{0.189005, 0.388212, 0.422783},
+		{0.311934, 0.371288, 0.316778}
+	};
+	float labels[batches][classes] = {
+		{0.000000, 1.000000, 0.000000},
+		{1.000000, 0.000000, 0.000000},
+		{0.000000, 1.000000, 0.000000},
+		{0.000000, 0.000000, 1.000000}
+	};
+
+	float expected_gradient[batches][classes] = {
+		{0.406902, -0.735790, 0.328889},
+		{-0.727304, 0.440727, 0.286577},
+		{0.189005, -0.611788, 0.422783},
+		{0.311934, 0.371288, -0.683222}
+	};
+
+	crossEntropyBackwards<batches, classes>(&predictions[0][0], &labels[0][0], &gradient[0][0]);
+
+	const float tolerance = 0.0000001f;
+	for (int i = 0; i < batches; i++)
+		for (int j = 0; j < classes; j++)
+			EXPECT_NEAR(expected_gradient[i][j], gradient[i][j], tolerance) << "Mismatch at index " << i << ', ' << j << std::endl;
+}
+
+TEST(BackwardTest, BackwardTest)
+{
+	constexpr int inFeatures = 3;
+	constexpr int outFeatures = 4;
+	constexpr int batches = 4;
+
+	float weights[inFeatures][outFeatures] = {
+		{0.374540, 0.950714, 0.731994, 0.598658},
+		{0.156019, 0.155995, 0.058084, 0.866176},
+		{0.601115, 0.708073, 0.020584, 0.969910}
+	};
+
+	float gradientNext[batches][outFeatures] = {
+		{0.832443, 0.212339, 0.181825, 0.183405},
+		{0.304242, 0.524756, 0.431945, 0.291229},
+		{0.611853, 0.139494, 0.292145, 0.366362},
+		{0.456070, 0.785176, 0.199674, 0.514234}
+	};
+
+	float expectedOutput[batches][inFeatures] = {
+		{0.756548, 0.332422, 0.832374},
+		{1.103372, 0.406671, 0.845808},
+		{0.794956, 0.451523, 0.827917},
+		{1.371305, 0.650654, 1.332983}
+	};
+
+	float output[batches][inFeatures];
+	backward<batches, inFeatures, outFeatures>(&weights[0][0], &gradientNext[0][0], &output[0][0]);
+
+	const float tolerance = 0.000001f;
+	for (int i = 0; i < batches; i++)
+		for (int j = 0; j < inFeatures; j++)
+			EXPECT_NEAR(expectedOutput[i][j], output[i][j], tolerance) << "Mismatch at index " << i << ', ' << j << std::endl;
+}

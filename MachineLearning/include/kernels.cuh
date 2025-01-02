@@ -47,7 +47,7 @@ void matmul(float* A, float* B, float* C)
 	CUDA_CHECK(cudaMemcpy(d_A, A, N * M * sizeof(float), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(d_B, B, M * P * sizeof(float), cudaMemcpyHostToDevice));
 
-	matmulKernel<N, M, P><<<numBlocks, threadsPerBlock>>> (d_weights, d_loss_gradient, d_output);
+	matmulKernel<N, M, P><<<numBlocks, threadsPerBlock>>> (d_A, d_B, d_C);
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	CUDA_CHECK(cudaMemcpy(C, d_C, N * P * sizeof(float), cudaMemcpyDeviceToHost));
@@ -93,7 +93,7 @@ void forward(float* X, float* W, float* B, float* Y) {
 	CUDA_CHECK(cudaMemcpy(d_W, W, M * N * sizeof(float), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(d_B, B, M * sizeof(float), cudaMemcpyHostToDevice));
 
-	forwardKernel<N, M><<<numBlocks, threadsPerBlock>>> (d_X, d_W, d_loss_gradient, d_Y);
+	forwardKernel<N, M><<<numBlocks, threadsPerBlock>>> (d_X, d_W, d_B, d_Y);
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	CUDA_CHECK(cudaMemcpy(Y, d_Y, M * sizeof(float), cudaMemcpyDeviceToHost));
@@ -298,17 +298,17 @@ void crossEntropyBackwards(float* prediction, float* real, float* output)
 {
 	constexpr int BLOCK_SIZE = 16;
 	dim3 threadsPerBlock(BLOCK_SIZE, BLOCK_SIZE);
-	dim3 numBlocks((N + BLOCK_SIZE - 1) / BLOCK_SIZE, (M + BLOCK_SIZE - 1) / BLOCK_SIZE);
+	dim3 numBlocks((M + BLOCK_SIZE - 1) / BLOCK_SIZE, (N + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
-	float *d_prediction, *d_real, d_output;
-	CUDA_CHECK(cudaMalloc(&d_prediction, N * M *sizeof(float)));
+	float *d_prediction, *d_real, *d_output;
+	CUDA_CHECK(cudaMalloc(&d_prediction, N * M * sizeof(float)));
 	CUDA_CHECK(cudaMalloc(&d_real, N * M * sizeof(float)));
-	CUDA_CHECK(cudaMalloc(&d_output, N * M sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&d_output, N * M * sizeof(float)));
 
 	CUDA_CHECK(cudaMemcpy(d_prediction, prediction, N * M * sizeof(float), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(d_real, real, N * M * sizeof(float), cudaMemcpyHostToDevice));
 
-	crossEntropyKernel<N, M> << <numBlocks, threadsPerBlock >> > (d_prediction, d_real, d_output);
+	crossEntropyBackwardsKernel<N, M> << <numBlocks, threadsPerBlock >> > (d_prediction, d_real, d_output);
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	CUDA_CHECK(cudaMemcpy(output, d_output, N * M * sizeof(float), cudaMemcpyDeviceToHost));
@@ -321,17 +321,17 @@ void crossEntropyBackwards(float* prediction, float* real, float* output)
 template<int Batch, int InFeatures, int OutFeatures>
 __global__ void backwardKernel(float* weights, float* gradients, float* outputs)
 {
-	int feature_idx = blockIdx.x * blockDim.x + threadIdx.x;
+	int in_idx = blockIdx.x * blockDim.x + threadIdx.x;
 	int sample_idx = blockIdx.y * blockDim.y + threadIdx.y;
 
-	if (feature_idx < OutFeatures && sample_idx < Batch)
+	if (in_idx < InFeatures && sample_idx < Batch)
 	{
 		float dot = 0.f;
-		for (int in_idx = 0; in_idx < InFeatures; ++in_idx)
+		for (int out_idx = 0; out_idx < OutFeatures; ++out_idx)
 		{
-			dot += weights[in_idx * OutFeatures + feature_idx] * gradients[sample_idx * InFeatures + in_idx];
+			dot += weights[in_idx * OutFeatures + out_idx] * gradients[sample_idx * OutFeatures + out_idx];
 		}
-		outputs[sample_idx * OutFeatures + feature_idx] = dot;
+		outputs[sample_idx * InFeatures + in_idx] = dot;
 	}
 }
 
@@ -344,16 +344,16 @@ void backward(float* weights, float* loss_gradient, float* output)
 
 	float* d_weights, * d_loss_gradient, * d_output;
 	CUDA_CHECK(cudaMalloc(&d_weights, InFeatures * OutFeatures * sizeof(float)));
-	CUDA_CHECK(cudaMalloc(&d_loss_gradient, Batch * InFeatures * sizeof(float)));
-	CUDA_CHECK(cudaMalloc(&d_output, Batch * OutFeatures * sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&d_loss_gradient, Batch * OutFeatures * sizeof(float)));
+	CUDA_CHECK(cudaMalloc(&d_output, Batch * InFeatures * sizeof(float)));
 
 	CUDA_CHECK(cudaMemcpy(d_weights, weights, InFeatures * OutFeatures * sizeof(float), cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(d_loss_gradient, loss_gradient, Batch * InFeatures * sizeof(float), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(d_loss_gradient, loss_gradient, Batch * OutFeatures * sizeof(float), cudaMemcpyHostToDevice));
 
 	backwardKernel<Batch, InFeatures, OutFeatures> << <numBlocks, threadsPerBlock >> > (d_weights, d_loss_gradient, d_output);
 	CUDA_CHECK(cudaDeviceSynchronize());
 
-	CUDA_CHECK(cudaMemcpy(output, d_output, Batch * OutFeatures * sizeof(float), cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(output, d_output, Batch * InFeatures * sizeof(float), cudaMemcpyDeviceToHost));
 
 	cudaFree(d_weights);
 	cudaFree(d_loss_gradient);
